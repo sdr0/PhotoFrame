@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <title>Photo Frame</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;            
+        }
+        #main {
+            position: fixed;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: black;
+        }
+        #main #photo {
+            width: 100vw;
+            height: 100vh;
+            object-fit: contain;
+        }
+        #settings {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="main">
+    <img id="photo" src="image_spinner.gif"/>
+</div>
+
+<div id="settings">
+    <form>
+        <label>Duration (seconds): <input type="number" id="duration" value="5"/></label>
+        <label>Source List URI: <input type="text" id="sourceListUri" value=""/></label>
+        <label>Source List: <textarea id="sourceList"></textarea></label>
+        <button id="applyButton" type="button">Apply</button>
+    </form>
+</div>
+
+
+<script>
+
+let propertyNames = [
+    'duration',
+    'sourceListUri',
+    'sourceList'
+];
+
+let wakeLock = null;
+async function requestWakeLock() {
+    if ('wakeLock' in navigator) {
+        try {
+            wakeLock = await navigator.wakeLock.request('screen');
+        } catch (err) {
+            console.error(`${err.name}, ${err.message}`);
+        }
+    }
+}
+
+function PhotoFrame() {
+    this.settings = {};
+
+    this.settingsToLocalStorage = function() {
+        localStorage.setItem('settings', JSON.stringify(this.settings));
+    }
+
+    this.localStorageToSettings = function() {
+        var settingsText = localStorage.getItem('settings') || '{}';
+        this.settings = JSON.parse(settingsText);
+    }
+
+    this.settingsToForm = function() {
+        for (let i = 0, l = propertyNames.length; i < l; i++) {
+            let propertyName = propertyNames[i];
+            let value = this.settings[propertyName];
+            let input = document.getElementById(propertyName);
+            input.value = value || "";
+        }
+    }
+
+    this.formToSettings = function() {
+        for (let i = 0, l = propertyNames.length; i < l; i++) {
+            let propertyName = propertyNames[i];
+            let input = document.getElementById(propertyName);
+            let value = input.value;
+            this.settings[propertyName] = value;
+        }
+    }
+
+    this.applySettingsForm = function() {
+        this.formToSettings();
+        this.settingsToLocalStorage();
+        this.run();
+    }
+
+    this.applySettingsFromStorage = function() {
+        this.localStorageToSettings();
+        this.settingsToForm();
+        this.run();
+    }
+
+    this.spinnerUri = 'image_spinner.gif';
+    this.noImageUri = 'no_image.svg';
+
+    this.imgList = [];
+    this.currentImgIndex = 0;
+    this.timerId = null;
+
+    this.run = function() {
+        if (this.timerId) {
+            clearTimeout(this.timerId);
+            this.timerId = null;
+        }
+        this.imgList = [ this.noImageUri ];
+        let sourceList = this.settings.sourceList;
+        if (sourceList) {
+            this.imgList = sourceList.split('\n');
+        }
+        this.currentImgIndex = this.imgList.length - 1;
+        this.incrementImg();
+    }
+
+    this.incrementImg = function() {
+        this.currentImgIndex++;
+        if (this.currentImgIndex >= this.imgList.length) {
+            this.currentImgIndex = 0;
+        }
+        let imgElement = document.getElementById('photo');
+        imgElement.src = this.imgList[this.currentImgIndex];
+        //start a timer to increment the image
+        if (this.imgList.length > 1) {
+            this.timerId = setTimeout(this.incrementImg.bind(this), (this.settings.duration || 10) * 1000);
+        }
+    }
+
+    this.init = function() {
+        this.applySettingsFromStorage();
+        this.settingsToForm();
+        this.run();
+    }
+}
+
+
+var photoFrame = new PhotoFrame();
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('applyButton').addEventListener('click', () => {
+        document.getElementById('settings').style.display = 'none';
+        photoFrame.applySettingsForm();
+    });
+    document.getElementById('photo').addEventListener('click', () => {
+        document.getElementById('settings').style.display = 'block';
+    });
+    photoFrame.init();
+    requestWakeLock();
+});
+
+// Re-request the wake lock when the visibility state changes
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && !wakeLock) {
+        requestWakeLock();
+    }
+});
+
+</script>
+</body>
+</html>
